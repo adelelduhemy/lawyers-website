@@ -31,7 +31,7 @@ A modern, responsive website for law firms built with Node.js, Express, and Mong
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/your-username/lawyers-website.git
+git clone https://github.com/adelelduhemy/lawyers-website.git
 ```
 
 2. Install dependencies:
@@ -42,10 +42,15 @@ npm install
 3. Set up environment variables:
 Create a `.env` file in the root directory with:
 ```
-MONGODB_URI=mongodb://localhost:27017/law_firm_db
-EMAIL_USER=your-email@gmail.com
-EMAIL_PASS=your-app-specific-password
-```
+MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.xxxxx.mongodb.net/law_firm_db?retryWrites=true&w=majority
+
+To get your MongoDB Atlas connection string:
+1. Log in to [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)
+2. Go to your cluster
+3. Click "Connect"
+4. Choose "Connect your application"
+5. Copy the connection string
+6. Replace `<username>` and `<password>` with your database credentials
 
 4. Start the server:
 ```bash
@@ -107,11 +112,14 @@ const transporter = nodemailer.createTransport({
 
 ## 🌐 Deployment
 
-1. Set up a MongoDB database:
-   - Use MongoDB Atlas (recommended)
-   - Create a new cluster
-   - Get your connection string
-   - Set up database access and network access
+1. Set up MongoDB Atlas:
+   - Create a free account at [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)
+   - Create a new cluster (Free tier available)
+   - Set up database access:
+     - Create a database user
+     - Set up IP whitelist (0.0.0.0/0 for all IPs)
+   - Get your connection string from "Connect" button
+   - Create a new database named "law_firm_db"
 
 2. Configure environment variables on your hosting platform:
    - Add MONGODB_URI
@@ -158,7 +166,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 Support
 
-For support, email: support@your-law-firm.com
+For support, email: adel.elduhemy@gmail.com
 
 ## 🙏 Acknowledgments
 
