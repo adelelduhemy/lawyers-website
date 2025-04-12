@@ -43,6 +43,9 @@ npm install
 Create a `.env` file in the root directory with:
 ```
 MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.xxxxx.mongodb.net/law_firm_db?retryWrites=true&w=majority
+EMAIL_USER=your-email@gmail.com
+EMAIL_PASS=your-app-specific-password
+```
 
 To get your MongoDB Atlas connection string:
 1. Log in to [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)

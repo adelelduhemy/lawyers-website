@@ -6,12 +6,16 @@ const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
 const https = require('https');
 const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
 
 const Message = require('./models/Message');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Serve static files from the parent directory
+app.use(express.static(path.join(__dirname, '..')));
 
 // Enhanced security middleware
 app.use(helmet({
@@ -47,11 +51,10 @@ app.use(limiter);
 
 // CORS configuration with enhanced security
 const corsOptions = {
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: ['http://localhost:5000', 'http://127.0.0.1:5000'], // Allow your frontend
   methods: ['GET', 'POST'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
-  maxAge: 86400 // 24 hours
+  allowedHeaders: ['Content-Type'],
+  credentials: true
 };
 app.use(cors(corsOptions));
 
@@ -76,83 +79,113 @@ mongoose.connect(process.env.MONGO_URI, {
   tlsAllowInvalidCertificates: false,
   tlsAllowInvalidHostnames: false,
   rejectUnauthorized: true,
-  // Additional security options
   minPoolSize: 10,
   maxPoolSize: 100,
   retryWrites: true,
   w: 'majority'
 })
 .then(() => console.log('✅ Connected to MongoDB'))
-.catch((err) => console.error('❌ MongoDB connection error:', err));
+.catch((err) => {
+  console.error('❌ MongoDB connection error:', err);
+  process.exit(1);
+});
 
 // Secure input validation middleware
 const validateContact = [
-  // Name validation - simple pattern to prevent ReDoS
+  // Name validation
   body('name')
     .trim()
-    .matches(/^[a-zA-Z\u0600-\u06FF\s]{2,50}$/) // Allow Arabic and English letters
-    .withMessage('Name must be between 2-50 characters and contain only letters and spaces')
+    .matches(/^[a-zA-Z\u0600-\u06FF\s]{2,50}$/)
+    .withMessage('الاسم يجب أن يكون بين 2-50 حرفاً ويحتوي على أحرف عربية أو إنجليزية فقط')
     .escape(),
 
-  // Email validation - using built-in isEmail() which is safe against ReDoS
+  // Enhanced email validation
   body('email')
+    .trim()
+    .notEmpty()
+    .withMessage('البريد الإلكتروني مطلوب')
     .isEmail()
-    .withMessage('Please provide a valid email address')
-    .normalizeEmail(),
+    .withMessage('الرجاء إدخال بريد إلكتروني صحيح')
+    .normalizeEmail()
+    .custom((value) => {
+      // Check for common email providers
+      const allowedDomains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com'];
+      const domain = value.split('@')[1];
+      if (!allowedDomains.includes(domain)) {
+        throw new Error('نحن نقبل فقط عناوين البريد الإلكتروني من: Gmail, Yahoo, Hotmail, Outlook');
+      }
+      return true;
+    }),
 
-  // Message validation - simple pattern to prevent ReDoS
+  // Message validation
   body('message')
     .trim()
-    .matches(/^[\s\S]{10,1000}$/) // Allow any characters including newlines
-    .withMessage('Message must be between 10-1000 characters')
+    .notEmpty()
+    .withMessage('الرسالة مطلوبة')
+    .isLength({ max: 1000 })
+    .withMessage('الرسالة يجب ألا تتجاوز 1000 حرف')
     .escape()
 ];
+
+// Root route
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'index.html'));
+});
 
 // POST /contact with validation
 app.post('/contact', validateContact, async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    return res.status(400).json({ success: false, errors: errors.array() });
+    return res.status(400).json({ 
+      success: false, 
+      errors: errors.array().map(error => ({
+        msg: error.msg,
+        param: error.param
+      }))
+    });
   }
 
   const { name, email, message } = req.body;
 
   try {
+    if (!mongoose.models.Message) {
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Server configuration error' 
+      });
+    }
+
     const newMessage = new Message({ name, email, message });
     await newMessage.save();
-    res.status(200).json({ success: true, message: 'Message sent successfully!' });
+    
+    res.status(200).json({ 
+      success: true, 
+      message: 'Message sent successfully!' 
+    });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: 'Failed to send message' });
+    if (err.name === 'ValidationError') {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid data provided' 
+      });
+    }
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to send message. Please try again later.' 
+    });
   }
 });
 
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ success: false, message: 'Something went wrong!' });
+  res.status(500).json({ 
+    success: false, 
+    message: 'Something went wrong!' 
+  });
 });
 
-// Create HTTPS server if SSL certificates are available
-if (process.env.SSL_CERT_PATH && process.env.SSL_KEY_PATH) {
-  const httpsOptions = {
-    cert: fs.readFileSync(process.env.SSL_CERT_PATH),
-    key: fs.readFileSync(process.env.SSL_KEY_PATH),
-    minVersion: 'TLSv1.2',
-    ciphers: [
-      'ECDHE-ECDSA-AES128-GCM-SHA256',
-      'ECDHE-RSA-AES128-GCM-SHA256',
-      'ECDHE-ECDSA-AES256-GCM-SHA384',
-      'ECDHE-RSA-AES256-GCM-SHA384'
-    ].join(':'),
-    honorCipherOrder: true
-  };
-
-  https.createServer(httpsOptions, app).listen(PORT, () => {
-    console.log(`🚀 HTTPS Server is running on https://localhost:${PORT}`);
-  });
-} else {
-  app.listen(PORT, () => {
-    console.log(`🚀 HTTP Server is running on http://localhost:${PORT}`);
-  });
-}
+// Start server
+app.listen(PORT, () => {
+  console.log(`🚀 HTTP Server is running on http://localhost:${PORT}`);
+});
